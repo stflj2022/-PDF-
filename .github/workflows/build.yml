@@ -77,21 +77,21 @@ jobs:
 
     - name: Upload artifacts (Linux)
       if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pdf-retypeset-linux
         path: dist/pdf-retypeset-linux
 
     - name: Upload artifacts (Windows)
       if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pdf-retypeset-windows
         path: dist/pdf-retypeset-windows.exe
 
     - name: Upload artifacts (macOS)
       if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pdf-retypeset-mac
         path: dist/pdf-retypeset-mac
