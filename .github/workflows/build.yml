@@ -9,15 +9,16 @@ on:
     types: [ created ]
 
 permissions:
-  contents: write  # 允许创建和修改 Release
+  contents: write
+  actions: write  # 需要这个权限来上传 artifacts
 
 jobs:
   build:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-      fail-fast: false  # 一个平台失败不影响其他平台
-      max-parallel: 3    # 三个平台并行构建
+      fail-fast: false
+      max-parallel: 3
 
     runs-on: ${{ matrix.os }}
 
@@ -53,6 +54,10 @@ jobs:
           --hidden-import yaml \
           --name pdf-retypeset-linux \
           src/main.py
+        echo "=== Listing dist directory ==="
+        ls -lh dist/
+        echo "=== Checking if file exists ==="
+        test -f dist/pdf-retypeset-linux && echo "File exists" || echo "File NOT found"
 
     - name: Build with PyInstaller (Windows)
       if: matrix.os == 'windows-latest'
@@ -67,6 +72,7 @@ jobs:
           --name pdf-retypeset \
           src/main.py
         if exist dist\pdf-retypeset.exe ren dist\pdf-retypeset.exe pdf-retypeset-windows.exe
+        dir dist\
 
     - name: Build with PyInstaller (macOS)
       if: matrix.os == 'macos-latest'
@@ -79,6 +85,7 @@ jobs:
           --hidden-import yaml \
           --name pdf-retypeset-mac \
           src/main.py
+        ls -lh dist/
 
     - name: Upload artifacts (Linux)
       if: matrix.os == 'ubuntu-latest'
@@ -86,13 +93,16 @@ jobs:
       with:
         name: pdf-retypeset-linux
         path: dist/pdf-retypeset-linux
+        if-no-files-found: error  # 文件不存在时报错
 
     - name: Upload artifacts (Windows)
       if: matrix.os == 'windows-latest'
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         name: pdf-retypeset-windows
         path: dist/pdf-retypeset-windows.exe
+        if-no-files-found: warn
 
     - name: Upload artifacts (macOS)
       if: matrix.os == 'macos-latest'
@@ -100,6 +110,7 @@ jobs:
       with:
         name: pdf-retypeset-mac
         path: dist/pdf-retypeset-mac
+        if-no-files-found: error
 
     - name: Release (Linux)
       if: matrix.os == 'ubuntu-latest' && startsWith(github.ref, 'refs/tags/')
