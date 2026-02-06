@@ -54,7 +54,7 @@ jobs:
           --hidden-import yaml \
           --add-data "src:src" \
           --name pdf-retypeset-linux \
-          bundle_main.py
+          bundle_main_fixed.py
         echo "=== Listing dist directory ==="
         ls -lh dist/
         echo "=== Checking if file exists ==="
@@ -72,7 +72,7 @@ jobs:
           --hidden-import yaml \
           --add-data "src;src" \
           --name pdf-retypeset \
-          bundle_main.py
+          bundle_main_fixed.py
         if exist dist\pdf-retypeset.exe ren dist\pdf-retypeset.exe pdf-retypeset-windows.exe
         dir dist\
 
@@ -87,7 +87,7 @@ jobs:
           --hidden-import yaml \
           --add-data "src:src" \
           --name pdf-retypeset-mac \
-          bundle_main.py
+          bundle_main_fixed.py
         ls -lh dist/
 
     - name: Upload artifacts (Linux)
