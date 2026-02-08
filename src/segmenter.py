@@ -64,7 +64,7 @@ class Segmenter:
         gray_image: np.ndarray,
     ) -> List[CharacterBox]:
         """
-        竖排文本分割（完全照搬原始竖版项目）
+        竖排文本分割（完全照抄原始竖版项目）
 
         1. 形态学操作连接断开的笔画
         2. 连通域分析提取字块
@@ -75,14 +75,14 @@ class Segmenter:
         # 形态学处理
         processed = self._morphology_process(binary_image)
 
-        # 提取字块（使用原始竖版项目的提取逻辑，不去重）
-        blocks = self._extract_blocks_for_vertical(processed, gray_image)
+        # 提取字块（照抄原版）
+        blocks = self._extract_blocks(processed, gray_image)
 
         if not blocks:
             return []
 
-        # 按x聚类成列（使用原始竖版项目的简单聚类）
-        columns = self._cluster_by_x_simple(blocks)
+        # 按x聚类成列（照抄原版）
+        columns = self._cluster_by_x(blocks)
 
         # 排序：从右到左 (X 降序)
         columns.sort(key=lambda col: -self._avg_x(col))
@@ -104,12 +104,12 @@ class Segmenter:
         gray_image: np.ndarray,
     ) -> List[CharacterBox]:
         """
-        横排文本分割（切成条状，不切割单个字）
+        横排文本分割（每行固定切成5条）
 
         1. 形态学操作连接断开的笔画
         2. 连通域分析提取字块
         3. 按y坐标聚类成行
-        4. 每行按X方向的空白分割成条
+        4. 每行固定切成5条（按长度平均分配）
         5. 每条内按x排序
         """
         # 形态学处理
@@ -127,17 +127,38 @@ class Segmenter:
         # 排序：从上到下 (Y 升序)
         rows.sort(key=lambda row: self._avg_y(row))
 
-        # 每行内按X方向的间距分割成条
+        # 每行固定切成5条
         result = []
+        strips_per_row = 5
+
         for row_id, row_blocks in enumerate(rows):
             # 按X坐标排序
             row_blocks.sort(key=lambda b: b.x)
 
-            # 按X方向的间距分割成条
-            strips = self._split_row_into_strips(row_blocks)
+            if not row_blocks:
+                continue
 
-            # 为每条创建一个合并的字块
-            for strip_id, strip_blocks in enumerate(strips):
+            # 计算行的总宽度
+            row_min_x = min(b.x for b in row_blocks)
+            row_max_x = max(b.x + b.width for b in row_blocks)
+            row_width = row_max_x - row_min_x
+
+            # 每条的宽度
+            strip_width_target = row_width / strips_per_row
+
+            # 按X位置分配到5条
+            for strip_id in range(strips_per_row):
+                # 计算这一条的X范围
+                strip_start_x = row_min_x + strip_id * strip_width_target
+                strip_end_x = row_min_x + (strip_id + 1) * strip_width_target
+
+                # 找出属于这一条的字块（中心点在范围内）
+                strip_blocks = [b for b in row_blocks if strip_start_x <= b.center_x < strip_end_x]
+
+                # 最后一条包含所有剩余的字块
+                if strip_id == strips_per_row - 1:
+                    strip_blocks = [b for b in row_blocks if b.center_x >= strip_start_x]
+
                 if not strip_blocks:
                     continue
 

@@ -26,7 +26,15 @@ class Pipeline:
         if self.progress_callback:
             self.progress_callback(current, total, message)
 
-    def process(self, input_path: Path, output_path: Path):
+    def process(self, input_path: Path, output_path: Path, orientation: str = "vertical"):
+        """
+        处理PDF文件
+
+        Args:
+            input_path: 输入文件路径
+            output_path: 输出文件路径
+            orientation: 页面方向，"vertical"（竖版）或 "horizontal"（横版）
+        """
         # 1. Load PDF
         self._report_progress(0, 100, "正在加载PDF...")
         try:
@@ -62,9 +70,7 @@ class Pipeline:
             # Preprocess
             binary = self.preprocessor.process(gray)
 
-            # Detect orientation
-            orientation = self.segmenter.detect_orientation(binary, gray)
-
+            # 使用用户指定的方向（不再自动检测）
             # Segment based on orientation
             if orientation == "vertical":
                 # 竖版：收集所有字符

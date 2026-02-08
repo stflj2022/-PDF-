@@ -16,6 +16,7 @@ class App:
         self.input_path = tk.StringVar()
         self.output_path = tk.StringVar()
         self.status_var = tk.StringVar(value="就绪")
+        self.orientation_var = tk.StringVar(value="vertical")  # 默认竖版
 
         self._create_widgets()
         self._setup_drag_drop()
@@ -65,6 +66,13 @@ class App:
         self.format_var = tk.StringVar(value=self.config.output.format)
         cb_format = ttk.Combobox(frame_settings, textvariable=self.format_var, values=["pdf", "images"])
         cb_format.grid(row=len(settings)+1, column=1, sticky="w", pady=2)
+
+        # Orientation Selection
+        ttk.Label(frame_settings, text="页面方向:").grid(row=len(settings)+2, column=0, sticky="w", pady=2)
+        orientation_frame = ttk.Frame(frame_settings)
+        orientation_frame.grid(row=len(settings)+2, column=1, sticky="w", pady=2)
+        ttk.Radiobutton(orientation_frame, text="竖版", variable=self.orientation_var, value="vertical").pack(side="left", padx=5)
+        ttk.Radiobutton(orientation_frame, text="横版", variable=self.orientation_var, value="horizontal").pack(side="left", padx=5)
 
         # Progress
         frame_progress = ttk.Frame(self.root, padding=10)
@@ -136,16 +144,19 @@ class App:
     def _run_pipeline(self, input_file, output_file):
         try:
             pipeline = Pipeline(self.config)
-            
+
             def callback(current, total, msg):
                 self.root.after(0, lambda: self._update_progress(current, total, msg))
-                
+
+            # 获取用户选择的方向
+            orientation = self.orientation_var.get()
+
             pipeline.set_progress_callback(callback)
-            pipeline.process(Path(input_file), Path(output_file))
-            
+            pipeline.process(Path(input_file), Path(output_file), orientation)
+
             self.root.after(0, lambda: messagebox.showinfo("完成", "处理成功！"))
             self.root.after(0, lambda: self.status_var.set("就绪"))
-            
+
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("错误", f"处理失败: {e}"))
             self.root.after(0, lambda: self.status_var.set("失败"))
