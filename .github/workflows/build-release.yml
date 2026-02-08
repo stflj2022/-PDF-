@@ -1,0 +1,134 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送 v* 标签时触发（如 v2.0, v2.1）
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.9']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    # Linux: 安装系统依赖
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y poppler-utils
+
+    # macOS: 安装系统依赖
+    - name: Install system dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install poppler
+
+    # Windows: 下载 poppler
+    - name: Install poppler (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install poppler
+
+    # 安装 Python 依赖
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    # 构建可执行文件
+    - name: Build executable
+      run: |
+        pyinstaller --clean --noconfirm pdf-retypeset.spec
+
+    # Linux: 创建 AppImage
+    - name: Create AppImage (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+        chmod +x appimagetool-x86_64.AppImage
+        ./appimagetool-x86_64.AppImage AppDir PDF智能重排工具-v${{ github.ref_name }}-linux-x86_64.AppImage
+
+    # 打包构建产物
+    - name: Package artifacts (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        mkdir -p release
+        cp PDF智能重排工具-*.AppImage release/
+        cd release && tar -czf pdf-retypeset-${{ github.ref_name }}-linux-x86_64.tar.gz *.AppImage
+
+    - name: Package artifacts (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        mkdir release
+        Compress-Archive -Path dist/pdf-retypeset.exe -DestinationPath release/pdf-retypeset-${{ github.ref_name }}-windows-x86_64.zip
+
+    - name: Package artifacts (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        mkdir -p release
+        cd dist && tar -czf ../release/pdf-retypeset-${{ github.ref_name }}-macos-x86_64.tar.gz pdf-retypeset.app
+
+    # 上传构建产物
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ runner.os }}-build
+        path: release/*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          Linux-build/*
+          Windows-build/*
+          macOS-build/*
+        body: |
+          ## PDF智能重排工具 ${{ github.ref_name }}
+
+          ### 主要功能
+          - ✅ 自动检测PDF页面方向（横版/竖版）
+          - ✅ 支持横排文本处理（从左到右，从上到下）
+          - ✅ 支持竖排文本处理（从右到左，从上到下）
+          - ✅ 拖拽文件导入功能
+          - ✅ 图形化界面
+
+          ### 下载说明
+          - **Linux**: `pdf-retypeset-*-linux-x86_64.tar.gz` 或 `.AppImage`
+          - **Windows**: `pdf-retypeset-*-windows-x86_64.zip`
+          - **macOS**: `pdf-retypeset-*-macos-x86_64.tar.gz`
+
+          ### 使用方法
+          1. 下载对应平台的文件
+          2. 解压（如果是压缩包）
+          3. 运行可执行文件
+          4. 拖拽PDF文件到界面或点击"浏览..."选择文件
+          5. 调整参数后点击"开始处理"
+
+          ### 技术细节
+          - 横版参数：gap_threshold=0.5, area<30
+          - 竖版参数：area<50, tolerance=0.8
+          - 方向检测：avg_per_col > avg_per_row * 1.5
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

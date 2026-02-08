@@ -49,3 +49,9 @@ test*.pdf
 # Backup files
 *.backup
 *.bak
+
+# Build artifacts (GitHub Actions will build these)
+*.AppImage
+AppDir/usr/bin/pdf-retypeset
+dist/
+build/
