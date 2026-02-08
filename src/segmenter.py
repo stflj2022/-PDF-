@@ -229,8 +229,8 @@ class Segmenter:
         # 形态学处理
         processed = self._morphology_process(binary_image)
 
-        # 提取字块（使用竖版参数进行检测，更敏感）
-        blocks = self._extract_blocks_vertical(processed, gray_image)
+        # 提取字块（使用原始竖版项目的提取逻辑）
+        blocks = self._extract_blocks_for_vertical(processed, gray_image)
 
         if not blocks:
             return "vertical"  # 默认竖版
@@ -238,16 +238,16 @@ class Segmenter:
         if len(blocks) < 5:
             return "horizontal"  # 字块太少，默认横版
 
-        # 尝试两种聚类（使用竖版参数）
+        # 尝试两种聚类
         rows = self._cluster_by_y(blocks)
-        columns = self._cluster_by_x_vertical(blocks)
+        columns = self._cluster_by_x_simple(blocks)
 
         avg_per_row = len(blocks) / len(rows) if rows else 0
         avg_per_col = len(blocks) / len(columns) if columns else 0
 
-        # 竖排特征：每列字数明显多于每行，且列数不多
-        # 降低阈值，从2倍改为1.5倍，更容易识别竖版
-        if avg_per_col > avg_per_row * 1.5 and len(columns) <= 10:
+        # 竖排特征：每列字数明显多于每行
+        # 放宽列数限制，从10改为20
+        if avg_per_col > avg_per_row * 1.5 and len(columns) <= 20:
             return "vertical"
 
         return "horizontal"
