@@ -64,7 +64,7 @@ class Segmenter:
         gray_image: np.ndarray,
     ) -> List[CharacterBox]:
         """
-        竖排文本分割
+        竖排文本分割（完全照搬原始竖版项目）
 
         1. 形态学操作连接断开的笔画
         2. 连通域分析提取字块
@@ -75,14 +75,14 @@ class Segmenter:
         # 形态学处理
         processed = self._morphology_process(binary_image)
 
-        # 提取字块（使用竖版参数）
-        blocks = self._extract_blocks_vertical(processed, gray_image)
+        # 提取字块（使用原始竖版项目的提取逻辑，不去重）
+        blocks = self._extract_blocks_for_vertical(processed, gray_image)
 
         if not blocks:
             return []
 
-        # 按x聚类成列（使用竖版参数）
-        columns = self._cluster_by_x_vertical(blocks)
+        # 按x聚类成列（使用原始竖版项目的简单聚类）
+        columns = self._cluster_by_x_simple(blocks)
 
         # 排序：从右到左 (X 降序)
         columns.sort(key=lambda col: -self._avg_x(col))
@@ -386,6 +386,47 @@ class Segmenter:
 
         return False
 
+    def _extract_blocks_for_vertical(
+        self,
+        binary: np.ndarray,
+        gray: np.ndarray,
+    ) -> List[CharacterBox]:
+        """提取字块（原始竖版项目，不去重）"""
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+            binary, connectivity=8
+        )
+
+        blocks = []
+        for i in range(1, num_labels):
+            x = stats[i, cv2.CC_STAT_LEFT]
+            y = stats[i, cv2.CC_STAT_TOP]
+            w = stats[i, cv2.CC_STAT_WIDTH]
+            h = stats[i, cv2.CC_STAT_HEIGHT]
+            area = stats[i, cv2.CC_STAT_AREA]
+
+            # 过滤太小的噪点
+            if area < 50:
+                continue
+            if w < 5 and h < 5:
+                continue
+
+            # 过滤太大的（可能是边框、大块污渍等）
+            if w > binary.shape[1] * 0.8 or h > binary.shape[0] * 0.8:
+                continue
+
+            # 从原始灰度图提取字块图像
+            block_image = gray[y:y+h, x:x+w].copy()
+
+            blocks.append(CharacterBox(
+                image=block_image,
+                x=x,
+                y=y,
+                width=w,
+                height=h,
+            ))
+
+        return blocks
+
     def _extract_blocks_vertical(
         self,
         binary: np.ndarray,
@@ -455,6 +496,44 @@ class Segmenter:
                 current_x = block.center_x
 
         columns.append(current_col)
+        return columns
+
+    def _cluster_by_x_simple(self, blocks: List[CharacterBox]) -> List[List[CharacterBox]]:
+        """按x坐标聚类成列（原始竖版项目的简单聚类）"""
+        if not blocks:
+            return []
+
+        if len(blocks) < 3:
+            return [blocks]
+
+        # 估算列数和容差
+        widths = [b.width for b in blocks]
+        median_w = sorted(widths)[len(widths) // 2]
+
+        # 容差：中位宽度的80%（原始竖版项目参数）
+        tolerance = median_w * 0.8
+
+        blocks_sorted = sorted(blocks, key=lambda b: b.center_x)
+
+        columns = []
+        current_col = [blocks_sorted[0]]
+        current_x = blocks_sorted[0].center_x
+
+        for block in blocks_sorted[1:]:
+            if abs(block.center_x - current_x) <= tolerance:
+                current_col.append(block)
+                current_x = sum(b.center_x for b in current_col) / len(current_col)
+            else:
+                columns.append(current_col)
+                current_col = [block]
+                current_x = block.center_x
+
+        columns.append(current_col)
+
+        # 过滤掉只有极少字符的列（除非总字符也很少）
+        if len(blocks) > 20:
+             columns = [col for col in columns if len(col) >= 1]
+
         return columns
 
     def _cluster_by_x_vertical(self, blocks: List[CharacterBox]) -> List[List[CharacterBox]]:
