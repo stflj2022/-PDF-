@@ -6,14 +6,9 @@ on:
       - 'v*'  # 当推送 v* 标签时触发（如 v2.0, v2.1）
 
 jobs:
-  build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.9']
-
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
@@ -21,89 +16,136 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.9'
 
-    # Linux: 安装系统依赖
-    - name: Install system dependencies (Linux)
-      if: runner.os == 'Linux'
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y poppler-utils
 
-    # macOS: 安装系统依赖
-    - name: Install system dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew install poppler
-
-    # Windows: 下载 poppler
-    - name: Install poppler (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        choco install poppler
-
-    # 安装 Python 依赖
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
 
-    # 构建可执行文件
     - name: Build executable
       run: |
-        pyinstaller --clean --noconfirm pdf-retypeset.spec
+        pyinstaller --clean --noconfirm --onefile --windowed \
+          --name pdf-retypeset \
+          --add-data "src:src" \
+          run.py
 
-    # Linux: 创建 AppImage
-    - name: Create AppImage (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-        chmod +x appimagetool-x86_64.AppImage
-        ./appimagetool-x86_64.AppImage AppDir PDF智能重排工具-v${{ github.ref_name }}-linux-x86_64.AppImage
-
-    # 打包构建产物
-    - name: Package artifacts (Linux)
-      if: runner.os == 'Linux'
+    - name: Package artifacts
       run: |
         mkdir -p release
-        cp PDF智能重排工具-*.AppImage release/
-        cd release && tar -czf pdf-retypeset-${{ github.ref_name }}-linux-x86_64.tar.gz *.AppImage
+        cd dist
+        tar -czf ../release/pdf-retypeset-${{ github.ref_name }}-linux-x86_64.tar.gz pdf-retypeset
 
-    - name: Package artifacts (Windows)
-      if: runner.os == 'Windows'
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-build
+        path: release/*
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install poppler
+      run: |
+        choco install poppler -y
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build executable
+      run: |
+        pyinstaller --clean --noconfirm --onefile --windowed --name pdf-retypeset --add-data "src;src" run.py
+
+    - name: Package artifacts
       run: |
         mkdir release
         Compress-Archive -Path dist/pdf-retypeset.exe -DestinationPath release/pdf-retypeset-${{ github.ref_name }}-windows-x86_64.zip
 
-    - name: Package artifacts (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        mkdir -p release
-        cd dist && tar -czf ../release/pdf-retypeset-${{ github.ref_name }}-macos-x86_64.tar.gz pdf-retypeset.app
-
-    # 上传构建产物
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ runner.os }}-build
+        name: windows-build
+        path: release/*
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install system dependencies
+      run: |
+        brew install poppler
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build executable
+      run: |
+        pyinstaller --clean --noconfirm --onefile --windowed \
+          --name pdf-retypeset \
+          --add-data "src:src" \
+          run.py
+
+    - name: Package artifacts
+      run: |
+        mkdir -p release
+        cd dist
+        tar -czf ../release/pdf-retypeset-${{ github.ref_name }}-macos-x86_64.tar.gz pdf-retypeset
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-build
         path: release/*
 
   release:
     name: Create Release
-    needs: build
+    needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display structure
+      run: ls -R artifacts
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          Linux-build/*
-          Windows-build/*
-          macOS-build/*
+          artifacts/linux-build/*
+          artifacts/windows-build/*
+          artifacts/macos-build/*
         body: |
           ## PDF智能重排工具 ${{ github.ref_name }}
 
@@ -115,7 +157,7 @@ jobs:
           - ✅ 图形化界面
 
           ### 下载说明
-          - **Linux**: `pdf-retypeset-*-linux-x86_64.tar.gz` 或 `.AppImage`
+          - **Linux**: `pdf-retypeset-*-linux-x86_64.tar.gz`
           - **Windows**: `pdf-retypeset-*-windows-x86_64.zip`
           - **macOS**: `pdf-retypeset-*-macos-x86_64.tar.gz`
 
